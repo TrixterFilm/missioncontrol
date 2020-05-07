@@ -1,0 +1,5 @@
+*.pyc
+*.idea
+.gafferBackups
+run.sh
+hierarchies
