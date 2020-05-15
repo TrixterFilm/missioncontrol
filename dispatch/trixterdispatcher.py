@@ -23,7 +23,6 @@
 # ######################################################################################################################
 
 import sys
-import inspect
 
 import IECore
 
@@ -33,6 +32,8 @@ import GafferDispatch
 
 from missioncontrol.nodes import (
     Root,
+    Serial,
+    Parallel,
     HierarchyTask,
     JobtronautProcessor,
     JobtronautTask
@@ -47,6 +48,8 @@ class TaskTemplate(object):
     def __repr__(self):
         code = \
             """
+            from jobtronaut.author import Task
+            
             class {name}(Task):
                 title = {name}
                 argument_processors = {processors}
@@ -113,9 +116,23 @@ class JobtronautDispatcher(GafferDispatch.Dispatcher):
     def get_required_tasks(startnode, scriptnode):
         graphgadget = GafferUI.GraphGadget(scriptnode)
         assert graphgadget, "We need a proper graphgadget."
-        required_tasks = []
+
+        class Tuple(tuple):
+            def __init__(self, iterable):
+                if len(iterable) == 1:
+                    super(Tuple, self).__init__(iterable[0])
+                else:
+                    super(Tuple, self).__init__(iterable)
+
+        class List(list):
+            def __init__(self, iterable):
+                if len(iterable) == 1:
+                    super(List, self).__init__(iterable[0])
+                else:
+                    super(List, self).__init__(iterable)
 
         def _get_nodes(current):
+            required_tasks = []
             downstream_nodes = tuple([g.node() for g in graphgadget.connectedNodeGadgets(
                 current,
                 Gaffer.Plug.Direction.Out,
@@ -123,18 +140,21 @@ class JobtronautDispatcher(GafferDispatch.Dispatcher):
             )])
 
             for node in downstream_nodes:
-                if isinstance(node, Root):
-                    # TODO: store the graphgadgets name to set the
-                    #  hierarchynodes correct name upon expansion
-                    break
-                elif isinstance(node, HierarchyTask):
+                if isinstance(node, Gaffer.Dot):
+                    required_tasks.append(_get_nodes(node))
+                elif isinstance(node, Serial):
+                    required_tasks.append(Tuple(_get_nodes(node)))
+                elif isinstance(node, (Parallel)):
+                    required_tasks.append(List(_get_nodes(node)))
+                elif isinstance(node, (HierarchyTask, JobtronautTask)):
                     required_tasks.append(node.getName())
-                    break
-                elif isinstance(node, JobtronautTask):
-                    required_tasks.append(node.getName())
-                _get_nodes(node)
 
-        _get_nodes(startnode)
+                # while len(required_tasks) == 1 and isinstance(required_tasks[0], (List, tuple)):
+                #         required_tasks = required_tasks[0]
+
+            return required_tasks
+
+        required_tasks = _get_nodes(startnode)
         return required_tasks
 
 
