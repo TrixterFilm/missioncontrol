@@ -36,7 +36,7 @@ import GafferDispatch
 import IECore
 
 from jobtronaut.constants import LOGGING_NAMESPACE
-from jobtronaut.plugins import Plugins
+from jobtronaut.author.plugins import Plugins
 
 TASKS_PLUGS_TO_HIDE = [
     "preTasks",

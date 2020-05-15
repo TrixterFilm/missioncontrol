@@ -63,7 +63,7 @@ def append_compounds_to_menu(menu):
 
 
 def append_jobtronaut_plugins_to_menu(menu):
-    from jobtronaut.plugins import Plugins
+    from jobtronaut.author.plugins import Plugins
     tasks = Plugins().tasks
     processors = Plugins().processors
 
