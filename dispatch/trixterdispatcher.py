@@ -24,42 +24,45 @@
 
 import sys
 
-import IECore
-
 import Gaffer
 import GafferUI
 import GafferDispatch
 
 from missioncontrol.nodes import (
     Root,
-    Serial,
-    Parallel,
     HierarchyTask,
     JobtronautProcessor,
     JobtronautTask
 )
+
 
 class TaskTemplate(object):
     def __init__(self, name):
         self.name = name
         self.argument_processors = []
         self.required_tasks = []
+        self.elements_id = ""
+        self.per_element = False
 
     def __repr__(self):
         code = \
             """
-            from jobtronaut.author import Task
-            
             class {name}(Task):
                 title = {name}
                 argument_processors = {processors}
                 required_tasks = {tasks}
+                
+                {elements_id}
+                {flags}
             """.format(
+                elements_id="elements_id = {}".format(self.elements_id) if self.elements_id else "",
+                flags="flags = Task.Flags.PER_ELEMENT" if self.per_element else "",
                 name=self.name,
                 processors=self.argument_processors,
                 tasks=self.required_tasks
             )
         return code
+
 
 class JobtronautDispatcher(GafferDispatch.Dispatcher):
     """ Helper class to work around the limitation that we can't instantiate
@@ -71,6 +74,21 @@ class JobtronautDispatcher(GafferDispatch.Dispatcher):
         self.scriptnode = None
         self.graphgadget = None
 
+        # Set and hide existing plugs
+        self.getChild("jobsDirectory").setValue("/tmp/gafferdispatch")
+        Gaffer.Metadata.registerPlugValue(self.__class__, "framesMode", "plugValueWidget:type", "")
+        Gaffer.Metadata.registerPlugValue(self.__class__, "ignoreScriptLoadErrors", "plugValueWidget:type", "")
+        Gaffer.Metadata.registerPlugValue(self.__class__, "environmentCommand", "plugValueWidget:type", "")
+        Gaffer.Metadata.registerPlugValue(self.__class__, "jobName", "plugValueWidget:type", "")
+        Gaffer.Metadata.registerPlugValue(self.__class__, "jobsDirectory", "plugValueWidget:type", "")
+
+        # Add custom plugs to the Dispatcher UI
+        taskfile_location_plug = Gaffer.StringPlug("taskfile", Gaffer.Plug.Direction.In)
+        Gaffer.Metadata.registerPlugValue(taskfile_location_plug, "nodule:type", "")
+        Gaffer.Metadata.registerPlugValue(taskfile_location_plug, "plugValueWidget:type", "GafferUI.FileSystemPathPlugValueWidget")
+        Gaffer.Metadata.registerPlugValue(taskfile_location_plug, "path:leaf", False)
+        self.addChild(taskfile_location_plug)
+
     def dispatch(self, nodes):
         submitting_node = nodes[0]
         scriptnode = submitting_node.scriptNode()
@@ -81,6 +99,8 @@ class JobtronautDispatcher(GafferDispatch.Dispatcher):
             template = TaskTemplate(hierarchy_node.getName())
             template.required_tasks = JobtronautDispatcher.get_required_tasks(hierarchy_node, scriptnode)
             template.argument_processors = JobtronautDispatcher.get_processors(hierarchy_node)
+            template.elements_id = hierarchy_node.getChild("elements_id").getValue()
+            template.per_element = hierarchy_node.getChild("per_element").getValue()
             print(template)
 
     @staticmethod
@@ -116,23 +136,9 @@ class JobtronautDispatcher(GafferDispatch.Dispatcher):
     def get_required_tasks(startnode, scriptnode):
         graphgadget = GafferUI.GraphGadget(scriptnode)
         assert graphgadget, "We need a proper graphgadget."
-
-        class Tuple(tuple):
-            def __init__(self, iterable):
-                if len(iterable) == 1:
-                    super(Tuple, self).__init__(iterable[0])
-                else:
-                    super(Tuple, self).__init__(iterable)
-
-        class List(list):
-            def __init__(self, iterable):
-                if len(iterable) == 1:
-                    super(List, self).__init__(iterable[0])
-                else:
-                    super(List, self).__init__(iterable)
+        required_tasks = []
 
         def _get_nodes(current):
-            required_tasks = []
             downstream_nodes = tuple([g.node() for g in graphgadget.connectedNodeGadgets(
                 current,
                 Gaffer.Plug.Direction.Out,
@@ -140,21 +146,18 @@ class JobtronautDispatcher(GafferDispatch.Dispatcher):
             )])
 
             for node in downstream_nodes:
-                if isinstance(node, Gaffer.Dot):
-                    required_tasks.append(_get_nodes(node))
-                elif isinstance(node, Serial):
-                    required_tasks.append(Tuple(_get_nodes(node)))
-                elif isinstance(node, (Parallel)):
-                    required_tasks.append(List(_get_nodes(node)))
-                elif isinstance(node, (HierarchyTask, JobtronautTask)):
+                if isinstance(node, Root):
+                    # TODO: store the graphgadgets name to set the
+                    #  hierarchynode's correct name upon expansion
+                    break
+                elif isinstance(node, HierarchyTask):
                     required_tasks.append(node.getName())
+                    break
+                elif isinstance(node, JobtronautTask):
+                    required_tasks.append(node.getName())
+                _get_nodes(node)
 
-                # while len(required_tasks) == 1 and isinstance(required_tasks[0], (List, tuple)):
-                #         required_tasks = required_tasks[0]
-
-            return required_tasks
-
-        required_tasks = _get_nodes(startnode)
+        _get_nodes(startnode)
         return required_tasks
 
 
@@ -163,16 +166,8 @@ class JobtronautDispatcher(GafferDispatch.Dispatcher):
         pass
 
     @staticmethod
-    def initialize(*args, **kwargs):
-        print(args, kwargs)
+    def initialize(parent_plug):
+        pass
 
 
-GafferDispatch.Dispatcher.deregisterDispatcher("Tractor")
-GafferDispatch.Dispatcher.deregisterDispatcher("Local")
 
-IECore.registerRunTimeTyped(JobtronautDispatcher, typeName="trixterdispatcher::JobtronautDispatcher")
-GafferDispatch.Dispatcher.registerDispatcher("JobtronautDispatcher", JobtronautDispatcher, JobtronautDispatcher.initialize)
-
-Gaffer.Metadata.registerPlugValue(JobtronautDispatcher, "framesMode", "plugValueWidget:type", "")
-Gaffer.Metadata.registerPlugValue(JobtronautDispatcher, "ignoreScriptLoadErrors", "plugValueWidget:type", "")
-Gaffer.Metadata.registerPlugValue(JobtronautDispatcher, "environmentCommand", "plugValueWidget:type", "")
