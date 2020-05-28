@@ -39,6 +39,61 @@ from missioncontrol.nodes import (
 )
 
 
+class Tuple(tuple):
+    def __init__(self, iterable):
+        if len(iterable) == 1:
+            super(Tuple, self).__init__(iterable[0])
+        else:
+            super(Tuple, self).__init__(iterable)
+
+
+class List(list):
+    def __init__(self, iterable):
+        if len(iterable) == 1:
+            super(List, self).__init__(iterable[0])
+        else:
+            super(List, self).__init__(iterable)
+
+
+def _indent(required_tasks):
+    string = str(required_tasks)
+
+    # first remove all spaces to get clean tokens
+    string = string.replace(" ", "")
+
+    # write the first char without any additional indentation
+    new_string = "{}\n".format(string[0])
+
+    # as we are already at indentation level 1 with our class attributes, we
+    # want to print everything else at least at level 2
+    current_level = 2
+    last_char = string[0]
+    word_mode = False
+
+    for char in string[1:]:
+        if char in ("[", "("):
+            new_string += "    " * current_level
+            new_string += char
+            new_string += "\n"
+            current_level += 1
+        elif char in ("]", ")"):
+            new_string += "\n"
+            current_level -= 1
+            new_string += "    " * current_level
+            new_string += char
+        elif char == ",":
+            new_string += ",\n"
+        elif char == "'":
+            if not word_mode:
+                new_string += "    " * current_level
+            new_string += char
+            word_mode = not word_mode
+        else:
+            new_string += char
+
+    return new_string
+
+
 class TaskTemplate(object):
     def __init__(self, name):
         self.name = name
@@ -48,19 +103,10 @@ class TaskTemplate(object):
         self.per_element = False
 
     def __repr__(self):
-        code = textwrap.dedent(
-            """
-            class {name}(Task):
-                title = {name}
-                argument_processors = {processors}
-                required_tasks = {tasks}
-            """.format(
-                name=self.name,
-                processors=self.argument_processors,
-                tasks=self.required_tasks
-            )
-        )
-
+        code = "class {}(Task):".format(self.name)
+        code += "\n    title = {}".format(self.name)
+        code += "\n    argument_processors = {}".format(_indent(self.argument_processors)) if self.argument_processors else ""
+        code += "\n    required_tasks = {}".format(_indent(self.required_tasks))
         code += "\n    elements_id = {}".format(self.elements_id) if self.elements_id else ""
         code += "\n    flags = Task.Flags.PER_ELEMENT" if self.per_element else ""
 
@@ -148,24 +194,11 @@ class JobtronautDispatcher(GafferDispatch.Dispatcher):
                 current_plug = current_node.getChild("in").getInput()
         return processors
 
+
     @staticmethod
     def get_required_tasks(startnode, scriptnode):
         graphgadget = GafferUI.GraphGadget(scriptnode)
         assert graphgadget, "We need a proper graphgadget."
-
-        class Tuple(tuple):
-            def __init__(self, iterable):
-                if len(iterable) == 1:
-                    super(Tuple, self).__init__(iterable[0])
-                else:
-                    super(Tuple, self).__init__(iterable)
-
-        class List(list):
-            def __init__(self, iterable):
-                if len(iterable) == 1:
-                    super(List, self).__init__(iterable[0])
-                else:
-                    super(List, self).__init__(iterable)
 
         def _reduce_hierarchy_levels(nodes):
             """ Reduces unnecessary hierarchy levels for those cases that there's
