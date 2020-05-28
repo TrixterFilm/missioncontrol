@@ -23,6 +23,7 @@
 # ######################################################################################################################
 
 import sys
+import textwrap
 
 import Gaffer
 import GafferUI
@@ -47,24 +48,22 @@ class TaskTemplate(object):
         self.per_element = False
 
     def __repr__(self):
-        code = \
+        code = textwrap.dedent(
             """
-            from jobtronaut.author import Task
-            
             class {name}(Task):
                 title = {name}
                 argument_processors = {processors}
                 required_tasks = {tasks}
-                
-                {elements_id}
-                {flags}
             """.format(
-                elements_id="elements_id = {}".format(self.elements_id) if self.elements_id else "",
-                flags="flags = Task.Flags.PER_ELEMENT" if self.per_element else "",
                 name=self.name,
                 processors=self.argument_processors,
                 tasks=self.required_tasks
             )
+        )
+
+        code += "\n    elements_id = {}".format(self.elements_id) if self.elements_id else ""
+        code += "\n    flags = Task.Flags.PER_ELEMENT" if self.per_element else ""
+
         return code
 
 
@@ -99,13 +98,22 @@ class JobtronautDispatcher(GafferDispatch.Dispatcher):
 
         all_hierarchy_nodes = JobtronautDispatcher.get_hierarchy_nodes(submitting_node, scriptnode)
 
+        code = textwrap.dedent(
+            """
+            from jobtronaut.author import Task
+            """
+        )
+
         for hierarchy_node in all_hierarchy_nodes:
             template = TaskTemplate(hierarchy_node.getName())
             template.required_tasks = JobtronautDispatcher.get_required_tasks(hierarchy_node, scriptnode)
             template.argument_processors = JobtronautDispatcher.get_processors(hierarchy_node)
             template.elements_id = hierarchy_node.getChild("elements_id").getValue()
             template.per_element = hierarchy_node.getChild("per_element").getValue()
-            print(template)
+
+            code += "\n\n{}".format(template)
+
+        print(textwrap.dedent(code))
 
     @staticmethod
     def get_hierarchy_nodes(startnode, scriptnode, type_filter=HierarchyTask):
@@ -155,39 +163,54 @@ class JobtronautDispatcher(GafferDispatch.Dispatcher):
                 else:
                     super(List, self).__init__(iterable)
 
+        def _reduce_hierarchy_levels(nodes):
+            """ Reduces unnecessary hierarchy levels for those cases that there's
+            only a single entry in a Tuple or List. In these cases the nesting
+            does not add any useful information and can be ignored.
+            """
+            if isinstance(nodes, List):
+                while len(nodes) == 1:
+                    nodes = nodes[0]
+
+            elif isinstance(nodes, Tuple):
+                while (len(nodes)) == 1:
+                    nodes = nodes[0]
+                if not isinstance(nodes, Tuple):
+                    nodes = Tuple(nodes)
+
+            return nodes
+
         def _get_nodes(current):
-            required_tasks = []
+            required_tasks = List([])
             downstream_nodes = tuple([g.node() for g in graphgadget.connectedNodeGadgets(
                 current,
                 Gaffer.Plug.Direction.Out,
                 1
             )])
 
+            # Sorting by the x position is the expected behaviour for serial execution.
+            # We assume that the x ordering of downstream nodes is the determining
+            # factor for execution order.
+            downstream_nodes = sorted(downstream_nodes, key=lambda node: graphgadget.getNodePosition(node).x)
+
             for node in downstream_nodes:
                 if isinstance(node, Gaffer.Dot):
-                    required_tasks.append(_get_nodes(node))
+                    required_tasks.append(_reduce_hierarchy_levels(_get_nodes(node)))
                 elif isinstance(node, Serial):
-                    required_tasks.append(Tuple(_get_nodes(node)))
+                    required_tasks.append(_reduce_hierarchy_levels(Tuple(_get_nodes(node))))
                 elif isinstance(node, Parallel):
-                    required_tasks.append(List(_get_nodes(node)))
+                    required_tasks.append(_reduce_hierarchy_levels(List(_get_nodes(node))))
                 elif isinstance(node, (HierarchyTask, JobtronautTask)):
                     required_tasks.append(node.getName())
 
-
-                # Make sure we remove unnecessary nesting which might happen
-                # for linear, non splitting nodegraphs
-                while len(required_tasks) == 1 and isinstance(required_tasks[0], (List, Tuple)):
-                        required_tasks = required_tasks[0]
-
-            return required_tasks
+            return _reduce_hierarchy_levels(required_tasks)
 
         required_tasks = _get_nodes(startnode)
-        return required_tasks
+
+        # Make sure that we don't end up with a single required task without any wrapping List or Tuple
+        return required_tasks if isinstance(required_tasks, (List, Tuple)) else [required_tasks]
 
 
-    @staticmethod
-    def generate_code(hierarchynode, stuff):
-        pass
 
     @staticmethod
     def initialize(parent_plug):
