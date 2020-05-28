@@ -87,6 +87,7 @@ class JobtronautDispatcher(GafferDispatch.Dispatcher):
 
         # Add custom plugs to the Dispatcher UI
         taskfile_location_plug = Gaffer.StringPlug("taskfile", Gaffer.Plug.Direction.In)
+        taskfile_location_plug.setValue("/tmp/temptasks.py")
         Gaffer.Metadata.registerPlugValue(taskfile_location_plug, "nodule:type", "")
         Gaffer.Metadata.registerPlugValue(taskfile_location_plug, "plugValueWidget:type", "GafferUI.FileSystemPathPlugValueWidget")
         Gaffer.Metadata.registerPlugValue(taskfile_location_plug, "path:leaf", False)
@@ -113,7 +114,10 @@ class JobtronautDispatcher(GafferDispatch.Dispatcher):
 
             code += "\n\n{}".format(template)
 
-        print(textwrap.dedent(code))
+        code = textwrap.dedent(code)
+        filepath = self.getChild("taskfile").getValue()
+        with open(filepath, "w+") as fp:
+            fp.write(code)
 
     @staticmethod
     def get_hierarchy_nodes(startnode, scriptnode, type_filter=HierarchyTask):
