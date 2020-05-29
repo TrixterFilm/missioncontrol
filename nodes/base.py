@@ -29,6 +29,7 @@ import logging
 import sys
 
 from collections import namedtuple
+import contextlib
 from uuid import uuid4
 
 import Gaffer
@@ -56,6 +57,37 @@ _ARGUMENTS_COLOR = imath.Color3f(0.48, 0.35, 0.5)
 _ARGUMENTS_CONNECTION_COLOR = imath.Color3f(0.5, 0.5, 0.5)
 
 Expansion = namedtuple("Expansion", ["root", "arguments"])
+
+@contextlib.contextmanager
+def temporary_attribute_value(obj, attr, new_value):
+    """ Temporarily set an attribute on an object for the duration of the context manager
+
+    Args:
+        obj (instance):
+        attr (): name of the attribute to override
+        new_value (): override value
+
+    Returns:
+
+    """
+    replaced = False
+    old_value = None
+    if hasattr(obj, attr):
+        try:
+            if attr in obj.__dict__:
+                replaced = True
+        except AttributeError:
+            if attr in obj.__slots__:
+                replaced = True
+        if replaced:
+            old_value = getattr(obj, attr)
+    setattr(obj, attr, new_value)
+    yield replaced, old_value
+    if not replaced:
+        delattr(obj, attr)
+    else:
+        setattr(obj, attr, old_value)
+
 
 def get_expand_task_names(cls):
     class NodeVisitor(ast.NodeVisitor):
