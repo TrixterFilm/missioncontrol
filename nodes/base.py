@@ -263,7 +263,39 @@ class GafferDependencyNodeBase(Gaffer.DependencyNode, GafferNodeBaseMixin):
         return
 
 
-class JobtronautTask(GafferDependencyNodeBase):
+class JobtronautPluginBase(GafferTaskNodeBase):
+
+    def add_code_nodules(self, plugin):
+        code_plug = Gaffer.StringPlug("source", defaultValue=inspect.getsource(plugin))
+        Gaffer.Metadata.registerPlugValue(code_plug, "nodule:type", "")
+        Gaffer.Metadata.registerValue(
+            code_plug, "layout:section", "Code"
+        )
+        Gaffer.Metadata.registerValue(
+            code_plug,
+            "plugValueWidget:type", "GafferUI.MultiLineStringPlugValueWidget"
+        )
+        Gaffer.Metadata.registerValue(
+            code_plug,
+            "multiLineStringPlugValueWidget:role", "code"
+        )
+        Gaffer.Metadata.registerValue(
+            code_plug,
+            "layout:section:Settings.Code:summary",
+            "Information about the source code of this plugin."
+        )
+        Gaffer.MetadataAlgo.setReadOnly(code_plug, True)
+        self.addChild(code_plug)
+
+        module_plug = Gaffer.StringPlug("module", defaultValue=Plugins().get_module_path(self.type_plug.getValue()))
+        Gaffer.Metadata.registerValue(
+            module_plug, "layout:section", "Code"
+        )
+        Gaffer.MetadataAlgo.setReadOnly(module_plug, True)
+        self.addChild(module_plug)
+
+
+class JobtronautTask(JobtronautPluginBase):
     def __init__(self, name, task_name):
         super(JobtronautTask, self).__init__(name)
 
@@ -307,15 +339,19 @@ class JobtronautTask(GafferDependencyNodeBase):
                 Gaffer.Metadata.registerPlugValue(arguments_plug, "connectionGadget:color", _ARGUMENTS_CONNECTION_COLOR)
                 self.addChild(arguments_plug)
 
+        self.add_code_nodules(plugin)
 
-class JobtronautProcessor(GafferDependencyNodeBase):
+
+class JobtronautProcessor(JobtronautPluginBase):
     def __init__(self, name, processor_name):
         super(JobtronautProcessor, self).__init__(name)
 
         Gaffer.Metadata.registerValue(self.__class__, "nodeGadget:color", _PROCESSOR_COLOR)
         Gaffer.Metadata.registerValue(self.__class__, "icon", "processor.png")
 
-        scope_name_plug = Gaffer.StringPlug("scope", Gaffer.Plug.Direction.In, defaultValue="")
+        scope_name_plug = Gaffer.StringVectorDataPlug(
+            "scope", Gaffer.Plug.Direction.In, defaultValue=IECore.StringVectorData()
+        )
         Gaffer.Metadata.registerPlugValue(scope_name_plug, "nodule:type", "")
         self.addChild(scope_name_plug)
 
@@ -343,7 +379,85 @@ class JobtronautProcessor(GafferDependencyNodeBase):
         self.addChild(out_plug)
 
         plugin = Plugins().processor(processor_name)
+
+        Gaffer.Metadata.registerValue(
+            self["scope"],
+            "layout:section:Settings.Scope:summary",
+            "The scopes the processed values will be applied to."
+        )
+        Gaffer.Metadata.registerValue(
+            self["scope"], "layout:section", "Settings.Scope"
+        )
+
+        parameters_plug = Gaffer.CompoundDataPlug("parameters", Gaffer.Plug.Direction.In)
+
+        Gaffer.Metadata.registerPlugValue(parameters_plug, "nodule:type", "")
+        Gaffer.Metadata.registerValue(
+            parameters_plug, "layout:section", "Settings.Parameters"
+        )
+        Gaffer.Metadata.registerValue(
+            parameters_plug,
+            "layout:section:Settings.Parameters:summary",
+            "The parameters this processor is supposed to work with."
+        )
+        for parameter_name, parameter_value in plugin.parameters.items():
+            if isinstance(parameter_value, basestring):
+                plug = Gaffer.NameValuePlug(
+                    parameter_name, IECore.StringData(parameter_value), True, name=parameter_name
+                )
+            elif isinstance(parameter_value, float):
+                plug = Gaffer.NameValuePlug(
+                    parameter_name, IECore.FloatData(parameter_value), True, name=parameter_name
+                )
+            elif isinstance(parameter_value, bool):
+                plug = Gaffer.NameValuePlug(
+                    parameter_name, IECore.BoolData(parameter_value), True, name=parameter_name
+                )
+            elif isinstance(parameter_value, int):
+                plug = Gaffer.NameValuePlug(
+                    parameter_name, IECore.IntData(parameter_value), True, name=parameter_name
+                )
+            elif isinstance(parameter_value, list):
+                if parameter_value and all([isinstance(_, basestring) for _ in parameter_value]):
+                    plug = Gaffer.NameValuePlug(
+                        parameter_name,
+                        IECore.StringVectorData(parameter_value),
+                        True,
+                        name=parameter_name
+                    )
+                elif parameter_value and all([isinstance(_, bool) for _ in parameter_value]):
+                    plug = Gaffer.NameValuePlug(
+                        parameter_name,
+                        IECore.BoolVectorData(parameter_value),
+                        True,
+                        name=parameter_name
+                    )
+                elif parameter_value and all([isinstance(_, int) for _ in parameter_value]):
+                    plug = Gaffer.NameValuePlug(
+                        parameter_name,
+                        IECore.IntVectorData(parameter_value),
+                        True,
+                        name=parameter_name
+                    )
+                elif parameter_value and all([isinstance(_, float) for _ in parameter_value]):
+                    plug = Gaffer.NameValuePlug(
+                        parameter_name,
+                        IECore.FloatVectorData(parameter_value),
+                        True,
+                        name=parameter_name
+                    )
+            else:
+                plug = Gaffer.NameValuePlug(
+                    parameter_name, IECore.StringData(str(parameter_value)), True, name=parameter_name
+                )
+
+            parameters_plug.addChild(plug)
+
+        self.addChild(parameters_plug)
+        self.add_code_nodules(plugin)
+
         Gaffer.Metadata.registerValue(self, "description", plugin.description)
+
 
 class HierarchyTask(GafferDependencyNodeBase):
     def __init__(self, name="HierarchyTask"):
