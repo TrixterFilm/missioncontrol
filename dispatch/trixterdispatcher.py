@@ -22,6 +22,8 @@
 #  OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.                                 #
 # ######################################################################################################################
 
+import autopep8
+import json
 import sys
 import textwrap
 
@@ -55,8 +57,11 @@ class List(list):
             super(List, self).__init__(iterable)
 
 
-def _indent(required_tasks):
-    string = str(required_tasks)
+def _indent(input):
+    # todo: use the AST to properly format the code
+    #  or install a separate code formatting tool (introducing a dependency)
+
+    string = str(input)
 
     # first remove all spaces to get clean tokens
     string = string.replace(" ", "")
@@ -67,14 +72,55 @@ def _indent(required_tasks):
     # as we are already at indentation level 1 with our class attributes, we
     # want to print everything else at least at level 2
     current_level = 2
-    last_char = string[0]
     word_mode = False
+    type_mode = False
+    dict_counter = 0
+    prev_char = ""
+    dict_temp = ""
 
-    for char in string[1:]:
+    def _parse_dict(string):
+        temp = "{"
+        depth = 1
+
+        while True:
+            char = string[0]
+            if string[0] == "{":
+                depth += 1
+            elif string[0] == "}":
+                depth -= 1
+            elif string[0] == '"':
+                temp += "\\"
+            elif string[0] == "'":
+                temp += "\\"
+                char = '"'
+
+            temp += char
+            string = string[1:]
+
+            if depth == 0:
+                return temp, string
+
+    while string:
+        char = string[0]
+        string = string[1:]
+
+        if char == "{":
+            dict_temp, string = _parse_dict(string)
+            new_string += dict_temp
+            # print(dict_temp)
+            # dict_temp = json.loads(dict_temp)
+            # new_string += json.dumps(dict_temp, indent=4)
+            # print(new_string)
+
         if char in ("[", "("):
-            new_string += "    " * current_level
-            new_string += char
-            new_string += "\n"
+            if prev_char.isalnum():
+                # we're probably in a class or function definition
+                new_string += char
+            else:
+                new_string += "\n"
+                new_string += "    " * current_level
+                new_string += char
+                new_string += "\n"
             current_level += 1
         elif char in ("]", ")"):
             new_string += "\n"
@@ -83,13 +129,23 @@ def _indent(required_tasks):
             new_string += char
         elif char == ",":
             new_string += ",\n"
-        elif char == "'":
-            if not word_mode:
+        elif char in ("'", "\""):
+            if not word_mode and prev_char != "=":
                 new_string += "    " * current_level
             new_string += char
             word_mode = not word_mode
-        else:
+        elif word_mode:
             new_string += char
+        else:
+            if not type_mode and prev_char != "=":
+                new_string += "    " * current_level
+            new_string += char
+            type_mode = True
+            prev_char = char
+            continue
+
+        type_mode = False
+        prev_char = char
 
     return new_string
 
@@ -109,6 +165,22 @@ class TaskTemplate(object):
         code += "\n    required_tasks = {}".format(_indent(self.required_tasks))
         code += "\n    elements_id = {}".format(self.elements_id) if self.elements_id else ""
         code += "\n    flags = Task.Flags.PER_ELEMENT" if self.per_element else ""
+
+        return code
+
+
+class ProcessorDefinitionTemplate(object):
+    def __init__(self, name, scope=[], parameters={}):
+        self.name = name
+        self.scope = scope
+        self.parameters = parameters
+
+    def __repr__(self):
+        code = "ProcessorDefinition("
+        code += "name='{}'".format(self.name)
+        code += ",scope={}".format(self.scope) if self.scope else ""
+        code += ",parameters={}".format(self.parameters) if self.parameters else ""
+        code += ")"
 
         return code
 
@@ -145,22 +217,33 @@ class JobtronautDispatcher(GafferDispatch.Dispatcher):
 
         all_hierarchy_nodes = JobtronautDispatcher.get_hierarchy_nodes(submitting_node, scriptnode)
 
-        code = textwrap.dedent(
-            """
-            from jobtronaut.author import Task
-            """
-        )
+        code = "from jobtronaut.author import (Task, ProcessorDefinition)"
 
         for hierarchy_node in all_hierarchy_nodes:
             template = TaskTemplate(hierarchy_node.getName())
             template.required_tasks = JobtronautDispatcher.get_required_tasks(hierarchy_node, scriptnode)
-            template.argument_processors = JobtronautDispatcher.get_processors(hierarchy_node)
+
+            for processor_node in JobtronautDispatcher.get_processors(hierarchy_node):
+                processor = ProcessorDefinitionTemplate(processor_node.getName())
+                processor.scope = list(processor_node.getChild("scope").getValue())
+
+                for plug in processor_node.getChild("parameters").values():
+                    if plug.getChild("enabled") and not plug.getChild("value").isSetToDefault():
+                        processor.parameters[plug.getName()] = plug.getChild("value").getValue()
+
+                template.argument_processors.append(processor)
+
             template.elements_id = hierarchy_node.getChild("elements_id").getValue()
             template.per_element = hierarchy_node.getChild("per_element").getValue()
 
-            code += "\n\n{}".format(template)
+            code += "\n\n\n{}".format(template)
 
         code = textwrap.dedent(code)
+        # code = autopep8.fix_code(code, options={
+        #     "aggressive": True,
+        #     "experimental": True,
+        #     "hang_closing": True
+        # })
         filepath = self.getChild("taskfile").getValue()
         with open(filepath, "w+") as fp:
             fp.write(code)
@@ -190,7 +273,7 @@ class JobtronautDispatcher(GafferDispatch.Dispatcher):
             if isinstance(current_node, Gaffer.Dot):
                 current_plug = current_node.getChild("in").getInput()
             elif isinstance(current_node, JobtronautProcessor):
-                processors.insert(0, current_node.getName())
+                processors.insert(0, current_node)
                 current_plug = current_node.getChild("in").getInput()
         return processors
 
