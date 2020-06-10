@@ -23,7 +23,7 @@
 # ######################################################################################################################
 
 import autopep8
-import json
+import os
 import sys
 import textwrap
 
@@ -57,99 +57,6 @@ class List(list):
             super(List, self).__init__(iterable)
 
 
-def _indent(input):
-    # todo: use the AST to properly format the code
-    #  or install a separate code formatting tool (introducing a dependency)
-
-    string = str(input)
-
-    # first remove all spaces to get clean tokens
-    string = string.replace(" ", "")
-
-    # write the first char without any additional indentation
-    new_string = "{}\n".format(string[0])
-
-    # as we are already at indentation level 1 with our class attributes, we
-    # want to print everything else at least at level 2
-    current_level = 2
-    word_mode = False
-    type_mode = False
-    dict_counter = 0
-    prev_char = ""
-    dict_temp = ""
-
-    def _parse_dict(string):
-        temp = "{"
-        depth = 1
-
-        while True:
-            char = string[0]
-            if string[0] == "{":
-                depth += 1
-            elif string[0] == "}":
-                depth -= 1
-            elif string[0] == '"':
-                temp += "\\"
-            elif string[0] == "'":
-                temp += "\\"
-                char = '"'
-
-            temp += char
-            string = string[1:]
-
-            if depth == 0:
-                return temp, string
-
-    while string:
-        char = string[0]
-        string = string[1:]
-
-        if char == "{":
-            dict_temp, string = _parse_dict(string)
-            new_string += dict_temp
-            # print(dict_temp)
-            # dict_temp = json.loads(dict_temp)
-            # new_string += json.dumps(dict_temp, indent=4)
-            # print(new_string)
-
-        if char in ("[", "("):
-            if prev_char.isalnum():
-                # we're probably in a class or function definition
-                new_string += char
-            else:
-                new_string += "\n"
-                new_string += "    " * current_level
-                new_string += char
-                new_string += "\n"
-            current_level += 1
-        elif char in ("]", ")"):
-            new_string += "\n"
-            current_level -= 1
-            new_string += "    " * current_level
-            new_string += char
-        elif char == ",":
-            new_string += ",\n"
-        elif char in ("'", "\""):
-            if not word_mode and prev_char != "=":
-                new_string += "    " * current_level
-            new_string += char
-            word_mode = not word_mode
-        elif word_mode:
-            new_string += char
-        else:
-            if not type_mode and prev_char != "=":
-                new_string += "    " * current_level
-            new_string += char
-            type_mode = True
-            prev_char = char
-            continue
-
-        type_mode = False
-        prev_char = char
-
-    return new_string
-
-
 class TaskTemplate(object):
     def __init__(self, name):
         self.name = name
@@ -161,8 +68,8 @@ class TaskTemplate(object):
     def __repr__(self):
         code = "class {}(Task):".format(self.name)
         code += "\n    title = {}".format(self.name)
-        code += "\n    argument_processors = {}".format(_indent(self.argument_processors)) if self.argument_processors else ""
-        code += "\n    required_tasks = {}".format(_indent(self.required_tasks))
+        code += "\n    argument_processors = {}".format(self.argument_processors) if self.argument_processors else ""
+        code += "\n    required_tasks = {}".format(self.required_tasks)
         code += "\n    elements_id = {}".format(self.elements_id) if self.elements_id else ""
         code += "\n    flags = Task.Flags.PER_ELEMENT" if self.per_element else ""
 
@@ -170,10 +77,10 @@ class TaskTemplate(object):
 
 
 class ProcessorDefinitionTemplate(object):
-    def __init__(self, name, scope=[], parameters={}):
+    def __init__(self, name):
         self.name = name
-        self.scope = scope
-        self.parameters = parameters
+        self.scope = []
+        self.parameters = {}
 
     def __repr__(self):
         code = "ProcessorDefinition("
@@ -192,7 +99,7 @@ class JobtronautDispatcher(GafferDispatch.Dispatcher):
     """
     def __init__(self, name="Jobtronaut"):
         super(JobtronautDispatcher, self).__init__(name)
-        self.scriptnode = None
+        self.scriptnode = Gaffer.ScriptNode("ScriptNode")
         self.graphgadget = None
 
         # Set and hide existing plugs
@@ -214,6 +121,10 @@ class JobtronautDispatcher(GafferDispatch.Dispatcher):
     def dispatch(self, nodes):
         submitting_node = nodes[0]
         scriptnode = submitting_node.scriptNode()
+
+        # todo: figure out how to get the filename/scriptnode in the __init__ call
+        # filename = os.path.splitext(os.path.basename(scriptnode.getChild("fileName").getValue()))[0]
+        # self.getChild("taskfile").setValue("/tmp/jobtronaut_plugins/{}.py".format(filename))
 
         all_hierarchy_nodes = JobtronautDispatcher.get_hierarchy_nodes(submitting_node, scriptnode)
 
@@ -239,11 +150,12 @@ class JobtronautDispatcher(GafferDispatch.Dispatcher):
             code += "\n\n\n{}".format(template)
 
         code = textwrap.dedent(code)
-        # code = autopep8.fix_code(code, options={
-        #     "aggressive": True,
-        #     "experimental": True,
-        #     "hang_closing": True
-        # })
+        code = autopep8.fix_code(code, options={
+            "aggressive": True,
+            "experimental": True,
+            "hang_closing": False,
+            "max_line_length": 80
+        })
         filepath = self.getChild("taskfile").getValue()
         with open(filepath, "w+") as fp:
             fp.write(code)
