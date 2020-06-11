@@ -114,7 +114,7 @@ def get_expand_task_names(cls):
 class PluginSerialiser(Gaffer.NodeSerialiser):
 
     def moduleDependencies(self, node, serialisation):
-        return {"jobtronaut.nodes.base as nodebase"} | Gaffer.NodeSerialiser.moduleDependencies(self, node, serialisation)
+        return {"missioncontrol.nodes.base as nodebase"} | Gaffer.NodeSerialiser.moduleDependencies(self, node, serialisation)
 
     def constructor(self, node, serialisation):
         return "nodebase.{}(\"{}\", \"{}\")".format(
