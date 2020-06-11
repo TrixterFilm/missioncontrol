@@ -78,7 +78,6 @@ class JobtronautDispatcher(GafferDispatch.Dispatcher):
             template = TaskTemplate(hierarchy_node.getName())
             template.required_tasks = JobtronautDispatcher.get_required_tasks(hierarchy_node, scriptnode)
             template.argument_processors = JobtronautDispatcher.get_processors(hierarchy_node)
-            print(template)
 
     @staticmethod
     def get_hierarchy_nodes(startnode, scriptnode, type_filter=HierarchyTask):
@@ -144,7 +143,7 @@ class JobtronautDispatcher(GafferDispatch.Dispatcher):
 
     @staticmethod
     def initialize(*args, **kwargs):
-        print(args, kwargs)
+        pass
 
 
 GafferDispatch.Dispatcher.deregisterDispatcher("Tractor")
