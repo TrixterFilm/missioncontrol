@@ -84,13 +84,6 @@ class missioncontrol(Gaffer.Application):
                         },
                     },
                 ),
-                IECore.FileNameParameter(
-                    name="outputFile",
-                    description="Output the results to this file on disk.",
-                    defaultValue="",
-                    allowEmptyString=True,
-                    extensions="",
-                )
             ]
 
         )
