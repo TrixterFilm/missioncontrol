@@ -65,6 +65,7 @@ class TaskTemplate(object):
     def __init__(self, name):
         self.name = name
         self.title = ""
+        self.argument_defaults = {}
         self.argument_processors = []
         self.required_tasks = []
         self.elements_id = ""
@@ -73,6 +74,7 @@ class TaskTemplate(object):
     def __repr__(self):
         code = "class {}(Task):".format(self.name)
         code += "\n    title = '{}'".format(self.title)
+        code += "\n    argument_defaults = {}".format(self.argument_defaults)
         code += "\n    argument_processors = {}".format(self.argument_processors) if self.argument_processors else ""
         code += "\n    required_tasks = {}".format(self.required_tasks)
         code += "\n    elements_id = '{}'".format(self.elements_id) if self.elements_id else ""
@@ -149,6 +151,13 @@ class JobtronautDispatcher(GafferDispatch.Dispatcher):
 
                 template.argument_processors.append(processor)
 
+            argument_defaults = {}
+            for plug in hierarchy_node.getChild("argument_defaults").values():
+                if plug.getChild("enabled"):
+                    # TODO: VectorData needs to be converted to list correctly
+                    argument_defaults[plug.getChild("name").getValue()] = plug.getChild("value").getValue()
+
+            template.argument_defaults = argument_defaults
             template.title = hierarchy_node.getChild("title").getValue()
             template.elements_id = hierarchy_node.getChild("elements_id").getValue()
             template.per_element = hierarchy_node.getChild("per_element").getValue()
