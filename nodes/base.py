@@ -508,6 +508,19 @@ class HierarchyTask(GafferDependencyNodeBase):
         Gaffer.Metadata.registerPlugValue(description_plug, "nodule:type", "")
         self.addChild(description_plug)
 
+        argument_defaults_plug = Gaffer.CompoundDataPlug("argument_defaults", Gaffer.Plug.Direction.In)
+
+        Gaffer.Metadata.registerPlugValue(argument_defaults_plug, "nodule:type", "")
+        Gaffer.Metadata.registerValue(
+            argument_defaults_plug, "layout:section", "Settings.Argument_Defaults"
+        )
+        Gaffer.Metadata.registerValue(
+            argument_defaults_plug,
+            "layout:section:Settings.ArgumentDefaults:summary",
+            "The default values for arguments the task requires."
+        )
+        self.addChild(argument_defaults_plug)
+
         elements_id_plug = Gaffer.StringPlug("elements_id", Gaffer.Plug.Direction.In, defaultValue="")
         Gaffer.Metadata.registerPlugValue(elements_id_plug, "nodule:type", "")
         self.addChild(elements_id_plug)
