@@ -537,14 +537,6 @@ class HierarchyTask(GafferDependencyNodeBase):
         Gaffer.Metadata.registerPlugValue(processor_plug, "plugValueWidget:type", "")
         self.addChild(processor_plug)
         
-        arguments_plug = ArgumentsPlug("arguments_in", Gaffer.Plug.Direction.In)
-        Gaffer.Metadata.registerPlugValue(arguments_plug, "nodule:type", "GafferUI::StandardNodule")
-        Gaffer.Metadata.registerPlugValue(arguments_plug, "nodule:color", _ARGUMENTS_COLOR)
-        Gaffer.Metadata.registerPlugValue(arguments_plug, "noduleLayout:section", "left")
-        Gaffer.Metadata.registerPlugValue(arguments_plug, "plugValueWidget:type", "")
-        Gaffer.Metadata.registerPlugValue(arguments_plug, "connectionGadget:color", _ARGUMENTS_CONNECTION_COLOR)
-        self.addChild(arguments_plug)
-
 
 class Root(GafferTaskNodeBase):
     def __init__(self, name="Root"):

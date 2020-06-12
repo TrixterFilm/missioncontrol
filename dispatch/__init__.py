@@ -22,4 +22,13 @@
 #  OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.                                 #
 # ######################################################################################################################
 
+import GafferDispatch
+import IECore
+
 from trixterdispatcher import JobtronautDispatcher
+
+GafferDispatch.Dispatcher.deregisterDispatcher("Tractor")
+GafferDispatch.Dispatcher.deregisterDispatcher("Local")
+
+IECore.registerRunTimeTyped(JobtronautDispatcher, typeName="trixterdispatcher::JobtronautDispatcher")
+GafferDispatch.Dispatcher.registerDispatcher("JobtronautDispatcher", JobtronautDispatcher, JobtronautDispatcher.initialize)
