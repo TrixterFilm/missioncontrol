@@ -22,10 +22,14 @@
 #  OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.                                 #
 # ######################################################################################################################
 
-import autopep8
 import os
 import sys
 import textwrap
+
+try:
+    import autopep8
+except ImportError:
+    autopep8 = None
 
 import Gaffer
 import GafferUI
@@ -150,12 +154,15 @@ class JobtronautDispatcher(GafferDispatch.Dispatcher):
             code += "\n\n\n{}".format(template)
 
         code = textwrap.dedent(code)
-        code = autopep8.fix_code(code, options={
-            "aggressive": True,
-            "experimental": True,
-            "hang_closing": False,
-            "max_line_length": 80
-        })
+
+        if autopep8:
+            code = autopep8.fix_code(code, options={
+                "aggressive": True,
+                "experimental": True,
+                "hang_closing": False,
+                "max_line_length": 80
+            })
+
         filepath = self.getChild("taskfile").getValue()
         with open(filepath, "w+") as fp:
             fp.write(code)

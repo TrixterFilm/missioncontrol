@@ -116,6 +116,8 @@ class missioncontrol(Gaffer.Application):
         self.__addScript(args)
 
         if args["dispatch"].value:
+            self.dispatcher = GafferDispatch.Dispatcher.create(GafferDispatch.Dispatcher.getDefaultDispatcherType())
+
             if not len(args["nodes"]):
                 IECore.msg(IECore.Msg.Level.Error, "missioncontrol dispatch", "No nodes were specified.")
                 return 1
@@ -128,12 +130,11 @@ class missioncontrol(Gaffer.Application):
 
         try:
             with self.scriptNode.context():
-                dispatcher = GafferDispatch.Dispatcher.create(GafferDispatch.Dispatcher.getDefaultDispatcherType())
-                dispatcher.dispatch(nodes)
+                self.dispatcher.dispatch(nodes)
         except Exception:
             IECore.msg(
                 IECore.Msg.Level.Error,
-                "gaffer dispatch : dispatching %s" % str([node.relativeName(self.scriptNode) for node in nodes]),
+                "missioncontrol dispatch : dispatching %s" % str([node.relativeName(self.scriptNode) for node in nodes]),
                 "".join(traceback.format_exception(*sys.exc_info())),
             )
             return 1
@@ -157,9 +158,6 @@ class missioncontrol(Gaffer.Application):
         return False  # Remove idle callback
 
     def __applySettings(self, args):
-
-        dispatcher = GafferDispatch.Dispatcher.getDefaultDispatcherType()
-
         if len(args["settings"]) % 2:
             IECore.msg(IECore.Msg.Level.Error, "missioncontrol dispatch",
                        "\"settings\" parameter must have matching entry/value pairs")
@@ -170,7 +168,7 @@ class missioncontrol(Gaffer.Application):
             value = args["settings"][i + 1]
             if key.startswith("dispatcher."):
                 identifier = key.partition("dispatcher.")[-1]
-                status = self.__setValue(identifier, value, dispatcher)
+                status = self.__setValue(identifier, value, self.dispatcher)
             else:
                 status = self.__setValue(key, value, self.scriptNode)
             if status:
