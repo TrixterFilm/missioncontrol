@@ -22,6 +22,7 @@
 #  OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.                                 #
 # ######################################################################################################################
 
+import re
 import os
 import sys
 import textwrap
@@ -61,6 +62,14 @@ class List(list):
             super(List, self).__init__(iterable[0])
         else:
             super(List, self).__init__(iterable)
+
+
+class Lambda(object):
+    def __init__(self, code):
+        self._code = code
+
+    def __repr__(self):
+        return self._code
 
 
 class TaskTemplate(object):
@@ -128,7 +137,7 @@ class JobtronautDispatcher(GafferDispatch.Dispatcher):
         self.addChild(taskfile_location_plug)
 
     @staticmethod
-    def _get_named_values(parent, plug_name):
+    def _get_named_values(parent, plug_name, ignore_if_default=False):
         mapped = {}
         for plug in parent.getChild(plug_name).values():
             if plug.getChild("enabled"):
@@ -136,7 +145,20 @@ class JobtronautDispatcher(GafferDispatch.Dispatcher):
                 if isinstance(value, (
                 IECore.IntVectorData, IECore.StringVectorData, IECore.FloatVectorData, IECore.BoolVectorData)):
                     value = list(value)
-                mapped[plug.getChild("name").getValue()] = value
+                elif isinstance(value, basestring):
+                    if re.match(r"^\s*lambda\s+.*", value):
+                        value = Lambda(value)
+                    else:
+                        try:
+                            value = eval(value)
+                        except SyntaxError:
+                            pass
+
+                if ignore_if_default:
+                    if not plug.getChild("value").isSetToDefault():
+                        mapped[plug.getChild("name").getValue()] = value
+                else:
+                    mapped[plug.getChild("name").getValue()] = value
 
         return mapped
 
@@ -161,7 +183,7 @@ class JobtronautDispatcher(GafferDispatch.Dispatcher):
                 processor = ProcessorDefinitionTemplate(processor_node.getName())
                 processor.scope = list(processor_node.getChild("scope").getValue())
 
-                processor.parameters = self._get_named_values(processor_node, "parameters")
+                processor.parameters = self._get_named_values(processor_node, "parameters", ignore_if_default=True)
 
                 template.argument_processors.append(processor)
 
