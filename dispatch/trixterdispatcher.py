@@ -31,6 +31,8 @@ try:
 except ImportError:
     autopep8 = None
 
+import IECore
+
 import Gaffer
 import GafferUI
 import GafferDispatch
@@ -125,6 +127,20 @@ class JobtronautDispatcher(GafferDispatch.Dispatcher):
         Gaffer.Metadata.registerPlugValue(taskfile_location_plug, "path:leaf", False)
         self.addChild(taskfile_location_plug)
 
+    @staticmethod
+    def _get_named_values(parent, plug_name):
+        mapped = {}
+        for plug in parent.getChild(plug_name).values():
+            if plug.getChild("enabled"):
+                value = plug.getChild("value").getValue()
+                if isinstance(value, (
+                IECore.IntVectorData, IECore.StringVectorData, IECore.FloatVectorData, IECore.BoolVectorData)):
+                    value = list(value)
+                mapped[plug.getChild("name").getValue()] = value
+
+        return mapped
+
+
     def dispatch(self, nodes):
         submitting_node = nodes[0]
         scriptnode = submitting_node.scriptNode()
@@ -145,17 +161,11 @@ class JobtronautDispatcher(GafferDispatch.Dispatcher):
                 processor = ProcessorDefinitionTemplate(processor_node.getName())
                 processor.scope = list(processor_node.getChild("scope").getValue())
 
-                for plug in processor_node.getChild("parameters").values():
-                    if plug.getChild("enabled") and not plug.getChild("value").isSetToDefault():
-                        processor.parameters[plug.getName()] = plug.getChild("value").getValue()
+                processor.parameters = self._get_named_values(processor_node, "parameters")
 
                 template.argument_processors.append(processor)
 
-            argument_defaults = {}
-            for plug in hierarchy_node.getChild("argument_defaults").values():
-                if plug.getChild("enabled"):
-                    # TODO: VectorData needs to be converted to list correctly
-                    argument_defaults[plug.getChild("name").getValue()] = plug.getChild("value").getValue()
+            argument_defaults = self._get_named_values(hierarchy_node, "argument_defaults")
 
             template.argument_defaults = argument_defaults
             template.title = hierarchy_node.getChild("title").getValue()
