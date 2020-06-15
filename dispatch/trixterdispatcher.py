@@ -180,7 +180,7 @@ class JobtronautDispatcher(GafferDispatch.Dispatcher):
             template.required_tasks = JobtronautDispatcher.get_required_tasks(hierarchy_node, scriptnode)
 
             for processor_node in JobtronautDispatcher.get_processors(hierarchy_node):
-                processor = ProcessorDefinitionTemplate(processor_node.getName())
+                processor = ProcessorDefinitionTemplate(processor_node.getChild("type").getValue())
                 processor.scope = list(processor_node.getChild("scope").getValue())
 
                 processor.parameters = self._get_named_values(processor_node, "parameters", ignore_if_default=True)
