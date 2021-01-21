@@ -218,7 +218,7 @@ class GafferNodeBaseMixin(object):
         pass
 
 
-class GafferTaskNodeBase(Gaffer.TaskNode, GafferNodeBaseMixin):
+class GafferTaskNodeBase(GafferDispatch.TaskNode, GafferNodeBaseMixin):
     def __init__(self, name="BaseTask", hide_plugs=TASKS_PLUGS_TO_HIDE):
         super(GafferTaskNodeBase, self).__init__(name)
         self._setup_logger()
@@ -554,6 +554,12 @@ class HierarchyTask(GafferDependencyNodeBase):
 class Root(GafferTaskNodeBase):
     def __init__(self, name="Root"):
         super(Root, self).__init__(name)
+
+        type_plug = Gaffer.StringPlug("type", Gaffer.Plug.Direction.In)
+        type_plug.setValue(name)
+        Gaffer.MetadataAlgo.setReadOnly(type_plug, True)
+        Gaffer.Metadata.registerPlugValue(type_plug, "nodule:type", "")
+        self.addChild(type_plug)
 
         Gaffer.Metadata.registerValue(self.__class__, "nodeGadget:color", _ARGUMENTS_COLOR)
 
